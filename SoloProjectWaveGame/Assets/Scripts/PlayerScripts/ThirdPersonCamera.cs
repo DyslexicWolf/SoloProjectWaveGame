@@ -1,3 +1,4 @@
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
@@ -7,7 +8,6 @@ public class ThirdPersonCamera : MonoBehaviour
     public Transform orientation;
     public Transform player;
     public Transform playerObj;
-    public Rigidbody rb;
 
     private PlayerInputActions playerInputActions;
     private Vector2 mouseInput;
@@ -20,7 +20,7 @@ public class ThirdPersonCamera : MonoBehaviour
         Cursor.visible = false;
 
         playerInputActions = new PlayerInputActions();
-        playerInputActions.Player.Look.performed += ctx => mouseInput = ctx.ReadValue<Vector2>();
+        playerInputActions.Player.Look.performed += ctx => mouseInput = ctx.ReadValue<Vector2>().normalized;
         playerInputActions.Player.Look.canceled += ctx => mouseInput = Vector2.zero;
     }
 
@@ -36,15 +36,16 @@ public class ThirdPersonCamera : MonoBehaviour
 
     private void Update()
     {
-        //calculate orientation
-        Vector3 viewDir = player.position - new Vector3(transform.position.x, player.position.y, transform.position.z);
-        orientation.forward = viewDir.normalized;
+        Vector3 cameraForward = this.transform.forward;
 
-        //rotate player object
-        Vector3 inputDir = orientation.forward * mouseInput.y + orientation.right * mouseInput.x;
-        if(inputDir != Vector3.zero)
+        // Remove any vertical component
+        cameraForward.y = 0f;
+        cameraForward.Normalize();
+
+        if (cameraForward.magnitude > 0)
         {
-            playerObj.forward = Vector3.Slerp(playerObj.forward, inputDir.normalized, rotationSpeed * Time.deltaTime);
+            Quaternion targetRotation = Quaternion.LookRotation(cameraForward);
+            playerObj.rotation = Quaternion.Slerp(playerObj.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
     }
 }
