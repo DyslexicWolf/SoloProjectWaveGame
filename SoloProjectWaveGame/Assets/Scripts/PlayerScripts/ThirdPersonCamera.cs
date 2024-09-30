@@ -46,6 +46,7 @@ public class ThirdPersonCamera : MonoBehaviour
         {
             Quaternion targetRotation = Quaternion.LookRotation(cameraForward);
             playerObj.rotation = Quaternion.Slerp(playerObj.rotation, targetRotation, rotationSpeed * Time.deltaTime);
+            orientation.rotation = Quaternion.Slerp(orientation.rotation, targetRotation, rotationSpeed * Time.deltaTime);
         }
     }
 }
