@@ -34,6 +34,14 @@ public class PlayerMovement : MonoBehaviour
     private RaycastHit sloapHit;
     private bool exitingSlope;
 
+    [Header("Sliding")]
+    public float maxSlideTime;
+    public float slideForce;
+    private float slideTimer;
+
+    public float slideScaleY;
+    private bool isSliding;
+
     private PlayerInputActions playerInputActions;
 
     private Vector3 moveDirection;
@@ -53,6 +61,8 @@ public class PlayerMovement : MonoBehaviour
         playerInputActions.Player.Sprint.canceled += ctx => moveSpeed = walkSpeed;
         playerInputActions.Player.Crouch.performed += OnCrouchPerformed;
         playerInputActions.Player.Crouch.canceled += OnCrouchCanceled;
+        playerInputActions.Player.Slide.performed += OnSlidePerformed;
+        playerInputActions.Player.Slide.canceled += OnSlideCanceled;
 
         rb = GetComponent<Rigidbody>();
         rb.freezeRotation = true;
@@ -85,6 +95,24 @@ public class PlayerMovement : MonoBehaviour
         isJumping = false;
     }
 
+    private void OnSlidePerformed(InputAction.CallbackContext context)
+    {
+        if (moveInput.magnitude > Vector2.zero.magnitude && !isSliding)
+        {
+            isSliding = true;
+            slideTimer = maxSlideTime;
+            StartSlide();
+        }
+    }
+
+    private void OnSlideCanceled(InputAction.CallbackContext context)
+    {
+        if (isSliding)
+        {
+            StopSlide();
+        }
+    }
+
     private void OnEnable()
     {
         playerInputActions.Player.Enable();
@@ -114,9 +142,18 @@ public class PlayerMovement : MonoBehaviour
     
     private void FixedUpdate()
     {
-        MovePlayer();
-        
-        if(isJumping && readyToJump && isGrounded)
+
+        if (isSliding)
+        {
+            SlidingMovement();
+        }
+        else
+        {
+            MovePlayer();
+
+        }
+
+        if (isJumping && readyToJump && isGrounded)
         {
             readyToJump = false;
             Jump();
@@ -178,6 +215,31 @@ public class PlayerMovement : MonoBehaviour
     {
         readyToJump = true;
         exitingSlope = false;
+    }
+
+    private void SlidingMovement()
+    {
+        Vector3 inputDirection = orientation.forward * moveInput.y + orientation.right * moveInput.x;
+        rb.AddForce(inputDirection.normalized * slideForce * 10f, ForceMode.Force);
+
+        slideTimer -= Time.deltaTime;
+
+        if (slideTimer <= 0)
+        {
+            StopSlide();
+        }
+    }
+
+    private void StartSlide()
+    {
+        transform.localScale = new Vector3(transform.localScale.x, slideScaleY, transform.localScale.z);
+        rb.AddForce(Vector3.down * 5f, ForceMode.Impulse);
+    }
+
+    private void StopSlide()
+    {
+        isSliding = false;
+        transform.localScale = new Vector3(transform.localScale.x, startYScale, transform.localScale.z);
     }
 
     private bool OnSlope()
