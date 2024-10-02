@@ -11,9 +11,9 @@ public class PlayerMovement : MonoBehaviour
     public float walkSpeed;
     public float sprintSpeed;
     public float groundDrag;
-
     private float desiredMoveSpeed;
     private float lastDesiredMoveSpeed;
+    private bool isMoving;
     public Transform orientation;
 
     [Header("Jump")]
@@ -46,8 +46,22 @@ public class PlayerMovement : MonoBehaviour
     public float speedIncreaseMultiplier;
     public float slopeIncreaseMultiplier;
     private float slideTimer;
-
     private bool isSliding;
+
+    [Header("Wallrunning")]
+    public LayerMask whatIsWall;
+    public float wallrunSpeed;
+    public float maxWallrunTime;
+    private float wallrunTimer;
+    private bool isWallrunning;
+
+    [Header("WallrunDetection")]
+    public float wallCheckDistance;
+    public float minJumpHeight;
+    private RaycastHit leftWallHit;
+    private RaycastHit rightWallHit;
+    private bool wallLeft;
+    private bool wallRight;
 
     private PlayerInputActions playerInputActions;
 
@@ -60,8 +74,10 @@ public class PlayerMovement : MonoBehaviour
     private void Awake()
     {
         playerInputActions = new PlayerInputActions();
-        playerInputActions.Player.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
-        playerInputActions.Player.Move.canceled += ctx => moveInput = Vector2.zero;
+        //playerInputActions.Player.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
+        //playerInputActions.Player.Move.canceled += ctx => moveInput = Vector2.zero;
+        playerInputActions.Player.Move.performed += OnMovePerformed;
+        playerInputActions.Player.Move.canceled += OnMoveCanceled;
         playerInputActions.Player.Jump.performed += OnJumpPerformed;
         playerInputActions.Player.Jump.canceled += OnJumpCanceled;
         playerInputActions.Player.Sprint.performed += ctx => desiredMoveSpeed = sprintSpeed;
@@ -77,7 +93,18 @@ public class PlayerMovement : MonoBehaviour
         desiredMoveSpeed = walkSpeed;
         startYScale = transform.localScale.y;
     }
-    
+
+    private void OnMovePerformed(InputAction.CallbackContext context)
+    {
+        isMoving = true;
+        moveInput = context.ReadValue<Vector2>();
+    }
+
+    private void OnMoveCanceled(InputAction.CallbackContext context)
+    {
+        isMoving = false;
+        moveInput = Vector2.zero;
+    }
 
     private void OnCrouchPerformed(InputAction.CallbackContext context)
     {
@@ -135,6 +162,8 @@ public class PlayerMovement : MonoBehaviour
     {
         //ground check
         isGrounded = Physics.Raycast(transform.position, Vector3.down, playerHeight * 0.5f + 0.2f, whatIsGround);
+        CheckForWall();
+        CheckForWallrunning();
 
         //handle drag
         if (isGrounded)
@@ -156,13 +185,17 @@ public class PlayerMovement : MonoBehaviour
             moveSpeed = desiredMoveSpeed;
         }
 
+
         lastDesiredMoveSpeed = desiredMoveSpeed;
     }
     
     private void FixedUpdate()
     {
+        if (isWallrunning)
+        {
 
-        if (isSliding && OnSlope() && rb.linearVelocity.y <= 0.1f)
+        }
+        else if (isSliding && OnSlope() && rb.linearVelocity.y <= 0.1f)
         {
             desiredMoveSpeed = slideSpeed;
             SlidingMovement();
@@ -313,5 +346,63 @@ public class PlayerMovement : MonoBehaviour
     private Vector3 GetSlopeMoveDirection(Vector3 moveDirection)
     {
         return Vector3.ProjectOnPlane(moveDirection, sloapHit.normal).normalized;
+    }
+
+    private void CheckForWall()
+    {
+        wallRight = Physics.Raycast(transform.position, orientation.right, out rightWallHit, wallCheckDistance, whatIsWall);
+        wallLeft = Physics.Raycast(transform.position, -orientation.right, out leftWallHit, wallCheckDistance, whatIsWall);
+    }
+
+    private bool AboveGround()
+    {
+        return !Physics.Raycast(transform.position, Vector3.down, minJumpHeight, whatIsGround);
+    }
+
+    private void CheckForWallrunning()
+    {
+        if((wallLeft || wallRight) && AboveGround() && isMoving)
+        {
+            if (!isWallrunning)
+            {
+                StartWallrun();
+            }
+        }
+        else
+        {
+            if (isWallrunning)
+            {
+                StopWallrun();
+            }
+        }
+    }
+
+    private void StartWallrun()
+    {
+        isWallrunning = true;
+    }
+
+    private void StopWallrun()
+    {
+        isWallrunning = false;
+    }
+
+    private void WallRunningMovement()
+    {
+        //for no gravity
+        rb.useGravity = false;
+        rb.linearVelocity = new Vector3(rb.linearVelocity.x, 0f, rb.linearVelocity.z);
+
+        //get the wallnormal for Vector3.cross
+        Vector3 wallNormal = wallRight ? rightWallHit.normal : leftWallHit.normal;
+
+        Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
+
+        if((orientation.forward - wallForward).magnitude > (orientation.forward - -wallForward).magnitude)
+        {
+            wallForward = -wallForward;
+        }
+        //forward force
+        rb.AddForce(wallForward * wallrunSpeed, ForceMode.Force);
     }
 }
