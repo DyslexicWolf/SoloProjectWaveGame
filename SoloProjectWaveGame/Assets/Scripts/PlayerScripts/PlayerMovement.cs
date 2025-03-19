@@ -10,7 +10,9 @@ public class PlayerMovement : MonoBehaviour
     private float moveSpeed;
     public float walkSpeed;
     public float sprintSpeed;
+    private bool isSprinting;
     public float groundDrag;
+    public float speedIncreaseMultiplier;
     private float desiredMoveSpeed;
     private float lastDesiredMoveSpeed;
     private bool isMoving;
@@ -43,7 +45,6 @@ public class PlayerMovement : MonoBehaviour
     public float slideForce;
     public float slideSpeed;
     public float slideScaleY;
-    public float speedIncreaseMultiplier;
     public float slopeIncreaseMultiplier;
     private float slideTimer;
     private bool isSliding;
@@ -74,14 +75,12 @@ public class PlayerMovement : MonoBehaviour
     private void Awake()
     {
         playerInputActions = new PlayerInputActions();
-        //playerInputActions.Player.Move.performed += ctx => moveInput = ctx.ReadValue<Vector2>();
-        //playerInputActions.Player.Move.canceled += ctx => moveInput = Vector2.zero;
         playerInputActions.Player.Move.performed += OnMovePerformed;
         playerInputActions.Player.Move.canceled += OnMoveCanceled;
         playerInputActions.Player.Jump.performed += OnJumpPerformed;
         playerInputActions.Player.Jump.canceled += OnJumpCanceled;
-        playerInputActions.Player.Sprint.performed += ctx => desiredMoveSpeed = sprintSpeed;
-        playerInputActions.Player.Sprint.canceled += ctx => desiredMoveSpeed = walkSpeed;
+        playerInputActions.Player.Sprint.performed += OnSprintPerformed;
+        playerInputActions.Player.Sprint.canceled += OnSprintCanceled;
         playerInputActions.Player.Crouch.performed += OnCrouchPerformed;
         playerInputActions.Player.Crouch.canceled += OnCrouchCanceled;
         playerInputActions.Player.Slide.performed += OnSlidePerformed;
@@ -92,6 +91,16 @@ public class PlayerMovement : MonoBehaviour
         readyToJump = true;
         desiredMoveSpeed = walkSpeed;
         startYScale = transform.localScale.y;
+    }
+
+    private void OnSprintCanceled(InputAction.CallbackContext context)
+    {
+        isSprinting = false;
+    }
+
+    private void OnSprintPerformed(InputAction.CallbackContext context)
+    {
+        isSprinting = true;
     }
 
     private void OnMovePerformed(InputAction.CallbackContext context)
@@ -175,7 +184,7 @@ public class PlayerMovement : MonoBehaviour
             rb.linearDamping = 0;
         }
 
-        if(Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed) > 4f && moveSpeed != 0)
+        if (Mathf.Abs(desiredMoveSpeed - lastDesiredMoveSpeed) > 4f && moveSpeed != 0)
         {
             StopAllCoroutines();
             StartCoroutine(SmoothlyLerpMovement());
@@ -184,27 +193,31 @@ public class PlayerMovement : MonoBehaviour
         {
             moveSpeed = desiredMoveSpeed;
         }
-
+        SpeedControl();
 
         lastDesiredMoveSpeed = desiredMoveSpeed;
     }
-    
+
     private void FixedUpdate()
     {
         if (isWallrunning)
         {
-
+            WallRunningMovement();
         }
         else if (isSliding && OnSlope() && rb.linearVelocity.y <= 0.1f)
         {
             desiredMoveSpeed = slideSpeed;
             SlidingMovement();
         }
-        else
+        else if (isSprinting)
         {
             desiredMoveSpeed = sprintSpeed;
             MovePlayer();
-
+        }
+        else
+        {
+            desiredMoveSpeed = walkSpeed;
+            MovePlayer();
         }
 
         if (isJumping && readyToJump && isGrounded)
@@ -239,7 +252,7 @@ public class PlayerMovement : MonoBehaviour
         //limiting speed on slope
         if (OnSlope() && !exitingSlope)
         {
-            if(rb.linearVelocity.magnitude > moveSpeed)
+            if (rb.linearVelocity.magnitude > moveSpeed)
             {
                 rb.linearVelocity = rb.linearVelocity.normalized * moveSpeed;
             }
@@ -303,14 +316,14 @@ public class PlayerMovement : MonoBehaviour
         Vector3 inputDirection = orientation.forward * moveInput.y + orientation.right * moveInput.x;
         Debug.Log(slideTimer);
         //sliding normal
-        if(!OnSlope() || rb.linearVelocity.y > -0.1f)
+        if (!OnSlope() || rb.linearVelocity.y > -0.1f)
         {
             rb.AddForce(inputDirection.normalized * slideForce * 10f, ForceMode.Force);
             slideTimer -= Time.deltaTime;
         }
 
         //sliding down slope
-        else 
+        else
         {
             rb.AddForce(GetSlopeMoveDirection(inputDirection) * slideForce * 10f, ForceMode.Force);
         }
@@ -334,7 +347,7 @@ public class PlayerMovement : MonoBehaviour
 
     private bool OnSlope()
     {
-        if(Physics.Raycast(transform.position, Vector3.down, out sloapHit, playerHeight * 0.5f + 0.3f))
+        if (Physics.Raycast(transform.position, Vector3.down, out sloapHit, playerHeight * 0.5f + 0.3f))
         {
             float angle = Vector3.Angle(Vector3.up, sloapHit.normal);
             return angle < maxSlopeAngle && angle != 0;
@@ -361,7 +374,7 @@ public class PlayerMovement : MonoBehaviour
 
     private void CheckForWallrunning()
     {
-        if((wallLeft || wallRight) && AboveGround() && isMoving)
+        if ((wallLeft || wallRight) && AboveGround() && isMoving)
         {
             if (!isWallrunning)
             {
@@ -398,7 +411,7 @@ public class PlayerMovement : MonoBehaviour
 
         Vector3 wallForward = Vector3.Cross(wallNormal, transform.up);
 
-        if((orientation.forward - wallForward).magnitude > (orientation.forward - -wallForward).magnitude)
+        if ((orientation.forward - wallForward).magnitude > (orientation.forward - -wallForward).magnitude)
         {
             wallForward = -wallForward;
         }
